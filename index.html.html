@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link Player</title>
+<style>
+  :root { --bg:#14181f; --panel:#1d232d; --line:#2d3644; --text:#e8ecf2; --mute:#8d99ab; --accent:#4cc3ff; --err:#ff8a7a; }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-force]) { --bg:#f2f4f8; --panel:#fff; --line:#d5dbe5; --text:#1a2030; --mute:#5d6a7e; --accent:#0a7bc4; --err:#c0392b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:32px 20px 60px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; letter-spacing:-.01em; }
+  p.sub { margin:0 0 20px; color:var(--mute); }
+  .bar { display:flex; gap:8px; }
+  input { flex:1; min-width:0; padding:12px 14px; font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+  button { padding:12px 18px; font:inherit; font-weight:600; color:#04131c; background:var(--accent); border:0; border-radius:8px; cursor:pointer; }
+  input:focus-visible, button:focus-visible, .item:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  #msg { min-height:1.5em; margin:10px 0 0; color:var(--err); font-size:.92rem; }
+  .player { margin-top:16px; aspect-ratio:16/9; background:#000; border-radius:10px; overflow:hidden; }
+  .player iframe { width:100%; height:100%; border:0; display:block; }
+  .empty { display:grid; place-items:center; height:100%; color:var(--mute); text-align:center; padding:20px; }
+  .history { margin-top:28px; }
+  .history h2 { font-size:1rem; margin:0 0 10px; }
+  .item { display:flex; justify-content:space-between; gap:12px; width:100%; text-align:left; padding:10px 12px; margin-bottom:6px; color:var(--text); font:inherit; font-weight:400; background:var(--panel); border:1px solid var(--line); border-radius:8px; cursor:pointer; }
+  .item span:last-child { color:var(--mute); white-space:nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Link Player</h1>
+  <p class="sub">Paste a YouTube video or playlist link to watch it here.</p>
+
+  <div class="bar">
+    <input id="url" type="text" placeholder="https://www.youtube.com/watch?v=..." aria-label="YouTube link" autofocus>
+    <button id="go">Play</button>
+  </div>
+  <p id="msg" role="alert"></p>
+
+  <div class="player" id="player">
+    <div class="empty">Your video will appear here.</div>
+  </div>
+
+  <section class="history" id="history" hidden>
+    <h2>Recent</h2>
+    <div id="list"></div>
+  </section>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const ID = /^[\w-]{11}$/;
+
+  // Pull a video ID and/or playlist ID out of any common YouTube link format.
+  function parse(raw) {
+    let s = raw.trim();
+    if (!s) return null;
+    if (ID.test(s)) return { v: s };
+    if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    const host = u.hostname.replace(/^www\.|^m\./, "");
+    const list = u.searchParams.get("list");
+    let v = null;
+    if (host === "youtu.be") v = u.pathname.slice(1).split("/")[0];
+    else if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+      if (u.pathname === "/watch") v = u.searchParams.get("v");
+      else {
+        const m = u.pathname.match(/^\/(embed|shorts|live|v)\/([\w-]{11})/);
+        if (m) v = m[2];
+      }
+    } else return null;
+    if (v && !ID.test(v)) v = null;
+    if (!v && !list) return null;
+    return { v, list };
+  }
+
+  function embedSrc({ v, list }) {
+    const base = "https://www.youtube-nocookie.com/embed/";
+    if (v && list) return `${base}${v}?list=${encodeURIComponent(list)}&autoplay=1&rel=0`;
+    if (v) return `${base}${v}?autoplay=1&rel=0`;
+    return `${base}videoseries?list=${encodeURIComponent(list)}&autoplay=1&rel=0`;
+  }
+
+  let recent = [];
+  try { recent = JSON.parse(localStorage.getItem("recent") || "[]"); } catch {}
+
+  function save(raw) {
+    recent = [raw, ...recent.filter(x => x !== raw)].slice(0, 8);
+    try { localStorage.setItem("recent", JSON.stringify(recent)); } catch {}
+    renderHistory();
+  }
+
+  function renderHistory() {
+    $("history").hidden = !recent.length;
+    $("list").innerHTML = "";
+    recent.forEach(raw => {
+      const p = parse(raw);
+      const b = document.createElement("button");
+      b.className = "item";
+      b.innerHTML = "<span></span><span></span>";
+      b.children[0].textContent = raw.replace(/^https?:\/\/(www\.)?/, "");
+      b.children[1].textContent = p && p.list && !p.v ? "playlist" : "video";
+      b.onclick = () => { $("url").value = raw; play(); };
+      $("list").appendChild(b);
+    });
+  }
+
+  function play() {
+    const raw = $("url").value;
+    const p = parse(raw);
+    if (!p) { $("msg").textContent = "That doesn't look like a YouTube video or playlist link."; return; }
+    $("msg").textContent = "";
+    const f = document.createElement("iframe");
+    f.src = embedSrc(p);
+    f.title = "YouTube video player";
+    f.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen";
+    f.allowFullscreen = true;
+    f.referrerPolicy = "strict-origin-when-cross-origin";
+    $("player").replaceChildren(f);
+    $("msg").innerHTML = "";
+    const a = document.createElement("a");
+    a.href = p.v ? "https://www.youtube.com/watch?v=" + p.v + (p.list ? "&list=" + encodeURIComponent(p.list) : "") : "https://www.youtube.com/playlist?list=" + encodeURIComponent(p.list);
+    a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "Player not loading? Watch on YouTube";
+    a.style.color = "var(--mute)";
+    $("msg").appendChild(a);
+    save(raw.trim());
+  }
+
+  $("go").onclick = play;
+  $("url").addEventListener("keydown", e => { if (e.key === "Enter") play(); });
+  renderHistory();
+</script>
+</body>
+</html>
