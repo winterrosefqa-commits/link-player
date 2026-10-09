@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watchlist: play YouTube links in a queue</title>
+<style>
+  :root { --bg:#0f1218; --panel:#171c25; --panel2:#1e2531; --line:#2a3342; --text:#e8ebf1; --mute:#93a0b4; --accent:#8fb0ff; --warn:#f2c46d; --err:#ff8f80; }
+  * { box-sizing:border-box; }
+  html { scroll-padding-top:70px; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  h1,h2,h3 { font-family:Georgia,"Iowan Old Style",serif; font-weight:700; letter-spacing:-.01em; margin:0; }
+  a { color:var(--accent); }
+  button { font:inherit; cursor:pointer; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:7px 12px; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#0b1220; border-color:var(--accent); font-weight:700; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  header { position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 20px; }
+  .top { display:flex; align-items:center; justify-content:space-between; gap:16px; height:58px; }
+  .brand { font-family:Georgia,serif; font-size:1.3rem; font-weight:700; }
+  nav { display:flex; gap:4px; }
+  nav button { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; padding:8px 12px; color:var(--mute); }
+  nav button[aria-current="page"] { color:var(--text); border-bottom-color:var(--accent); }
+  main { padding:24px 0 60px; }
+  .banner { margin-bottom:16px; padding:12px 14px; border:1px solid var(--warn); border-radius:8px; color:var(--warn); background:#2a2412; }
+  .add { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:20px; }
+  .add textarea { width:100%; min-height:46px; resize:vertical; font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .add .row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:10px; flex-wrap:wrap; }
+  .hint { color:var(--mute); font-size:.9rem; }
+  #msg { color:var(--err); min-height:1.4em; font-size:.92rem; margin:6px 0 0; }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:20px; align-items:start; }
+  .stage { aspect-ratio:16/9; background:#000; border-radius:12px; overflow:hidden; position:relative; }
+  .stage iframe, #yt { width:100%; height:100%; border:0; display:block; }
+  .empty { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:24px; color:var(--mute); }
+  .now { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; }
+  .now h2 { font-size:1.15rem; }
+  .now .btns { display:flex; gap:8px; flex-shrink:0; }
+  .err { margin-top:10px; color:var(--err); }
+  .side { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; max-height:560px; overflow:auto; }
+  .side-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .side-head h3 { font-size:1.05rem; }
+  .item { display:flex; gap:10px; padding:8px; border-radius:8px; border:1px solid transparent; align-items:center; }
+  .item.cur { background:var(--panel2); border-color:var(--accent); }
+  .item img, .item .ph { width:96px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; background:#000; flex-shrink:0; cursor:pointer; }
+  .ph { display:grid; place-items:center; font-size:.75rem; color:var(--mute); }
+  .item .t { flex:1; min-width:0; }
+  .item .name { font-size:.9rem; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; cursor:pointer; }
+  .item .acts { display:flex; gap:6px; margin-top:4px; }
+  .item .acts button { padding:2px 8px; font-size:.8rem; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; margin-top:16px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .card img, .card .ph { width:100%; aspect-ratio:16/9; object-fit:cover; display:grid; background:#000; }
+  .card .b { padding:12px; }
+  .card .name { font-size:.95rem; margin-bottom:10px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .card .acts { display:flex; gap:6px; flex-wrap:wrap; }
+  .none { color:var(--mute); margin-top:16px; }
+  .prose { max-width:640px; }
+  .prose h2 { margin:28px 0 8px; font-size:1.25rem; }
+  .prose h2:first-child { margin-top:0; }
+  .prose p, .prose li { color:#c8d0dd; }
+  footer { border-top:1px solid var(--line); padding:20px 0; color:var(--mute); font-size:.88rem; }
+  [hidden] { display:none !important; }
+  @media (max-width:860px) { .grid { grid-template-columns:1fr; } .side { max-height:none; } .top { height:auto; flex-wrap:wrap; padding:10px 0 0; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap top">
+    <div class="brand">Watchlist</div>
+    <nav aria-label="Main">
+      <button data-view="watch" aria-current="page">Watch</button>
+      <button data-view="library">Library</button>
+      <button data-view="help">Help</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="banner" id="fileWarn" hidden>
+    You opened this from a file on your computer. YouTube blocks embedded players on local files (Error 153). Put this file on a website (GitHub Pages, Netlify) or run it from localhost, and it will work.
+  </div>
+
+  <!-- WATCH -->
+  <section id="v-watch">
+    <div class="add">
+      <textarea id="links" placeholder="Paste one or more YouTube video or playlist links" aria-label="YouTube links"></textarea>
+      <div class="row">
+        <span class="hint">Separate several links with spaces or new lines.</span>
+        <div><button id="addBtn" class="primary">Add to queue</button></div>
+      </div>
+      <p id="msg" role="alert"></p>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="stage">
+          <div id="yt"></div>
+          <div class="empty" id="empty">Add a link above and it plays here.</div>
+        </div>
+        <div class="now" id="now" hidden>
+          <h2 id="nowTitle"></h2>
+          <div class="btns">
+            <button id="prevBtn">Previous</button>
+            <button id="nextBtn">Next</button>
+            <button id="saveBtn">Save to library</button>
+          </div>
+        </div>
+        <div class="err" id="playErr" hidden></div>
+      </div>
+
+      <aside class="side" aria-label="Queue">
+        <div class="side-head"><h3>Up next</h3><button id="clearBtn">Clear</button></div>
+        <div id="queue"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section id="v-library" hidden>
+    <h2>Library</h2>
+    <p class="hint">Videos you saved. They stay in this browser.</p>
+    <div class="cards" id="cards"></div>
+    <p class="none" id="libNone" hidden>Nothing saved yet. Use "Save to library" on the Watch page.</p>
+  </section>
+
+  <!-- HELP -->
+  <section id="v-help" class="prose" hidden>
+    <h2>How it works</h2>
+    <p>Paste any YouTube video or playlist link and it joins the queue. When one video ends, the next one starts on its own.</p>
+    <h2>Links that work</h2>
+    <ul>
+      <li>youtube.com/watch?v=... links</li>
+      <li>youtu.be short links, Shorts, and live links</li>
+      <li>Playlist links (the whole playlist plays as one queue entry)</li>
+    </ul>
+    <h2>Links that don't</h2>
+    <ul>
+      <li>Channel pages. YouTube doesn't let a website list a channel's videos without an API key.</li>
+      <li>Videos whose owners turned off embedding. Watchlist shows a link to open them on YouTube, then moves on.</li>
+    </ul>
+    <h2>Your data</h2>
+    <p>The queue and library are saved in your own browser only. Nothing is sent to a server.</p>
+  </section>
+</main>
+
+<footer><div class="wrap">Videos are played by YouTube's own embedded player.</div></footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+let queue = load("wl-queue", []), lib = load("wl-lib", []), cur = -1, player = null, pending = null, skipTimer = null;
+const ID = /^[\w-]{11}$/;
+
+if (location.protocol === "file:") $("#fileWarn").hidden = false;
+
+/* ---------- parsing ---------- */
+function parse(raw) {
+  let s = raw.trim();
+  if (!s) return null;
+  if (ID.test(s)) return { v: s };
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  let u; try { u = new URL(s); } catch { return null; }
+  const host = u.hostname.replace(/^www\.|^m\./, "");
+  const list = u.searchParams.get("list");
+  let v = null;
+  if (host === "youtu.be") v = u.pathname.slice(1).split("/")[0];
+  else if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+    if (u.pathname === "/watch") v = u.searchParams.get("v");
+    else { const m = u.pathname.match(/^\/(embed|shorts|live|v)\/([\w-]{11})/); if (m) v = m[2]; }
+  } else return null;
+  if (v && !ID.test(v)) v = null;
+  if (!v && !list) return null;
+  return v ? { v } : { list };
+}
+const key = it => it.v || "pl:" + it.list;
+const thumb = it => it.v ? `https://i.ytimg.com/vi/${it.v}/mqdefault.jpg` : null;
+const watchUrl = it => it.v ? `https://www.youtube.com/watch?v=${it.v}` : `https://www.youtube.com/playlist?list=${it.list}`;
+const label = it => it.title || (it.v ? "YouTube video " + it.v : "Playlist");
+
+async function fetchTitle(it) {
+  if (it.title || !it.v) return;
+  try {
+    const r = await fetch("https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent(watchUrl(it)));
+    const j = await r.json();
+    if (j.title) { it.title = j.title; persist(); render(); }
+  } catch {}
+}
+function persist() { store("wl-queue", queue); store("wl-lib", lib); }
+
+/* ---------- views ---------- */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => show(b.dataset.view));
+function show(v) {
+  ["watch", "library", "help"].forEach(n => $("#v-" + n).hidden = n !== v);
+  document.querySelectorAll("nav button").forEach(b => b.toggleAttribute("aria-current", b.dataset.view === v));
+  document.querySelectorAll("nav button").forEach(b => { if (b.dataset.view !== v) b.removeAttribute("aria-current"); else b.setAttribute("aria-current", "page"); });
+}
+
+/* ---------- queue ---------- */
+function addLinks() {
+  const parts = $("#links").value.split(/[\s,]+/).filter(Boolean);
+  const items = [], bad = [];
+  parts.forEach(p => { const it = parse(p); it ? items.push(it) : bad.push(p); });
+  $("#msg").textContent = bad.length ? `Couldn't read ${bad.length} link${bad.length > 1 ? "s" : ""}: they aren't YouTube video or playlist links.` : "";
+  if (!items.length) return;
+  const first = queue.length;
+  items.forEach(it => { queue.push(it); fetchTitle(it); });
+  $("#links").value = "";
+  persist();
+  if (cur === -1) play(first); else render();
+}
+$("#addBtn").onclick = addLinks;
+$("#links").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addLinks(); } });
+$("#clearBtn").onclick = () => { queue = []; cur = -1; persist(); if (player) player.stopVideo(); $("#empty").hidden = false; $("#now").hidden = true; render(); };
+$("#nextBtn").onclick = next;
+$("#prevBtn").onclick = () => { if (cur > 0) play(cur - 1); };
+$("#saveBtn").onclick = () => { if (cur >= 0) saveItem(queue[cur]); };
+
+function saveItem(it) {
+  if (!lib.some(x => key(x) === key(it))) { lib.push({ ...it }); persist(); render(); }
+}
+function next() { if (cur + 1 < queue.length) play(cur + 1); }
+
+/* ---------- player ---------- */
+function loadAPI() {
+  if (document.getElementById("yt-api")) return;
+  window.onYouTubeIframeAPIReady = () => { if (pending !== null) { const p = pending; pending = null; play(p); } };
+  const s = document.createElement("script");
+  s.id = "yt-api"; s.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(s);
+}
+function play(i) {
+  clearTimeout(skipTimer);
+  $("#playErr").hidden = true;
+  cur = i; const it = queue[i];
+  $("#empty").hidden = true; $("#now").hidden = false;
+  render();
+  if (!player) {
+    if (!(window.YT && YT.Player)) { pending = i; loadAPI(); return; }
+    player = new YT.Player("yt", {
+      width: "100%", height: "100%", videoId: it.v || undefined,
+      playerVars: Object.assign({ autoplay: 1, rel: 0, playsinline: 1 }, it.v ? {} : { listType: "playlist", list: it.list }),
+      events: { onStateChange: e => { if (e.data === 0) next(); }, onError: onErr }
+    });
+  } else if (it.v) player.loadVideoById(it.v);
+  else player.loadPlaylist({ list: it.list, listType: "playlist" });
+}
+function onErr() {
+  const it = queue[cur]; if (!it) return;
+  const e = $("#playErr"); e.hidden = false; e.textContent = "This video can't be played here. ";
+  const a = document.createElement("a"); a.href = watchUrl(it); a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open it on YouTube";
+  e.appendChild(a);
+  if (cur + 1 < queue.length) { e.append(". Skipping to the next one in 4 seconds."); skipTimer = setTimeout(next, 4000); }
+}
+
+/* ---------- rendering ---------- */
+function btn(text, fn) { const b = document.createElement("button"); b.textContent = text; b.onclick = fn; return b; }
+function img(it, cls) {
+  const t = thumb(it);
+  if (t) { const i = document.createElement("img"); i.src = t; i.alt = ""; i.loading = "lazy"; return i; }
+  const d = document.createElement("div"); d.className = "ph"; d.textContent = "Playlist"; return d;
+}
+function render() {
+  const q = $("#queue"); q.innerHTML = "";
+  if (!queue.length) { const p = document.createElement("p"); p.className = "hint"; p.textContent = "The queue is empty."; q.appendChild(p); }
+  queue.forEach((it, i) => {
+    const row = document.createElement("div"); row.className = "item" + (i === cur ? " cur" : "");
+    const im = img(it); im.onclick = () => play(i);
+    const t = document.createElement("div"); t.className = "t";
+    const n = document.createElement("div"); n.className = "name"; n.textContent = label(it); n.onclick = () => play(i);
+    const acts = document.createElement("div"); acts.className = "acts";
+    acts.append(btn("Save", () => saveItem(it)), btn("Remove", () => {
+      queue.splice(i, 1);
+      if (i < cur) cur--; else if (i === cur) { cur = -1; if (player) player.stopVideo(); $("#empty").hidden = false; $("#now").hidden = true; }
+      persist(); render();
+    }));
+    t.append(n, acts); row.append(im, t); q.appendChild(row);
+  });
+  if (cur >= 0 && queue[cur]) $("#nowTitle").textContent = label(queue[cur]);
+
+  const c = $("#cards"); c.innerHTML = "";
+  $("#libNone").hidden = lib.length > 0;
+  lib.forEach((it, i) => {
+    const card = document.createElement("div"); card.className = "card";
+    const b = document.createElement("div"); b.className = "b";
+    const n = document.createElement("div"); n.className = "name"; n.textContent = label(it);
+    const acts = document.createElement("div"); acts.className = "acts";
+    acts.append(
+      btn("Play now", () => { queue.push({ ...it }); persist(); show("watch"); play(queue.length - 1); }),
+      btn("Add to queue", () => { queue.push({ ...it }); persist(); render(); }),
+      btn("Remove", () => { lib.splice(i, 1); persist(); render(); })
+    );
+    b.append(n, acts); card.append(img(it), b); c.appendChild(card);
+  });
+}
+queue.forEach(fetchTitle); lib.forEach(fetchTitle);
+render();
+</script>
+</body>
+</html>
